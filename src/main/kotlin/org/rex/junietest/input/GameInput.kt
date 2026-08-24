@@ -2,20 +2,27 @@ package org.rex.junietest.input
 
 import java.awt.event.KeyEvent
 import java.awt.event.KeyListener
-import java.util.concurrent.ConcurrentHashMap
 import javax.swing.JFrame
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
- * Handles keyboard input for the game
+ * Tracks which keys are currently held down, polled via isKeyPressed().
+ * No callback registration on purpose: PaddleEntity/AIPaddleEntity just
+ * poll every frame, which is one clear read path to reason about instead
+ * of callbacks firing out of a different (AWT) thread mid-frame.
  */
+@OptIn(ExperimentalAtomicApi::class)
 class GameInput(private val frame: JFrame) : KeyListener {
-    // Map of key codes to lists of callbacks
-    private val keyCallbacks = mutableMapOf<Int, MutableList<() -> Unit>>()
+    // Build buffer: mutated only from the AWT event thread. Swing dispatches
+    // keyPressed/keyReleased serially, never concurrently, so this needs no
+    // locking - there's exactly one writer.
+    private val keyBuffer = mutableSetOf<Int>()
 
-    // Set of currently pressed keys. Written from the AWT event thread
-    // (keyPressed/keyReleased) and read from the game loop thread
-    // (isKeyPressed), so it needs to be a thread-safe set.
-    private val pressedKeys = ConcurrentHashMap.newKeySet<Int>()
+    // Published snapshot the game loop thread reads via isKeyPressed(). Every
+    // change to keyBuffer is republished here as a fresh immutable copy, so
+    // reads are lock-free and this stays portable to Kotlin/Native.
+    private val pressedKeys = AtomicReference<Set<Int>>(emptySet())
 
     init {
         frame.addKeyListener(this)
@@ -23,33 +30,14 @@ class GameInput(private val frame: JFrame) : KeyListener {
         frame.requestFocus()
     }
 
-    /**
-     * Register a callback for when a key is pressed
-     * @param keyCode The key code to listen for (from KeyEvent)
-     * @param callback The function to call when the key is pressed
-     */
-    fun registerKeyPress(keyCode: Int, callback: () -> Unit) {
-        keyCallbacks.getOrPut(keyCode) { mutableListOf() }.add(callback)
-    }
-
-    /**
-     * Unregister a callback for a key press
-     * @param keyCode The key code to stop listening for
-     * @param callback The callback to remove
-     */
-    fun unregisterKeyPress(keyCode: Int, callback: () -> Unit) {
-        keyCallbacks[keyCode]?.remove(callback)
-    }
-
     override fun keyPressed(e: KeyEvent) {
-        if (!pressedKeys.contains(e.keyCode)) {
-            pressedKeys.add(e.keyCode)
-            keyCallbacks[e.keyCode]?.forEach { it() }
-        }
+        keyBuffer.add(e.keyCode)
+        pressedKeys.store(keyBuffer.toSet())
     }
 
     override fun keyReleased(e: KeyEvent) {
-        pressedKeys.remove(e.keyCode)
+        keyBuffer.remove(e.keyCode)
+        pressedKeys.store(keyBuffer.toSet())
     }
 
     override fun keyTyped(e: KeyEvent) {
@@ -62,6 +50,6 @@ class GameInput(private val frame: JFrame) : KeyListener {
      * @return true if the key is pressed, false otherwise
      */
     fun isKeyPressed(keyCode: Int): Boolean {
-        return pressedKeys.contains(keyCode)
+        return keyCode in pressedKeys.load()
     }
-} 
+}
