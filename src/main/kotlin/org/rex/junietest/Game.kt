@@ -107,6 +107,8 @@ class Game : JFrame() {
     }
 
     private fun update(deltaTime: Float) {
+        gameInput.sync()
+
         ball.update(deltaTime)
 
         leftPaddle.update(deltaTime)
