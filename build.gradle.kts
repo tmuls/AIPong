@@ -10,6 +10,10 @@ repositories {
 }
 
 dependencies {
+    // Multiplatform-friendly threading/synchronization (Dispatchers.Default,
+    // Mutex) used in place of java.lang.Thread / java.util.concurrent, which
+    // don't exist on Kotlin/Native.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     testImplementation(kotlin("test"))
 }
 

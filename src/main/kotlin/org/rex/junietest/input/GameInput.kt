@@ -2,8 +2,10 @@ package org.rex.junietest.input
 
 import java.awt.event.KeyEvent
 import java.awt.event.KeyListener
-import java.util.concurrent.ConcurrentHashMap
 import javax.swing.JFrame
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Handles keyboard input for the game
@@ -12,10 +14,13 @@ class GameInput(private val frame: JFrame) : KeyListener {
     // Map of key codes to lists of callbacks
     private val keyCallbacks = mutableMapOf<Int, MutableList<() -> Unit>>()
 
-    // Set of currently pressed keys. Written from the AWT event thread
+    // Set of currently pressed keys, written from the AWT event thread
     // (keyPressed/keyReleased) and read from the game loop thread
-    // (isKeyPressed), so it needs to be a thread-safe set.
-    private val pressedKeys = ConcurrentHashMap.newKeySet<Int>()
+    // (isKeyPressed). Guarded by keyLock instead of a JVM-only concurrent
+    // collection (java.util.concurrent has no Kotlin/Native equivalent);
+    // kotlinx.coroutines.sync.Mutex works identically on every target.
+    private val keyLock = Mutex()
+    private val pressedKeys = mutableSetOf<Int>()
 
     init {
         frame.addKeyListener(this)
@@ -42,14 +47,16 @@ class GameInput(private val frame: JFrame) : KeyListener {
     }
 
     override fun keyPressed(e: KeyEvent) {
-        if (!pressedKeys.contains(e.keyCode)) {
-            pressedKeys.add(e.keyCode)
+        // Check-and-add happens atomically inside the lock; callbacks run
+        // outside it so arbitrary callback code never executes while held.
+        val justPressed = runBlocking { keyLock.withLock { pressedKeys.add(e.keyCode) } }
+        if (justPressed) {
             keyCallbacks[e.keyCode]?.forEach { it() }
         }
     }
 
     override fun keyReleased(e: KeyEvent) {
-        pressedKeys.remove(e.keyCode)
+        runBlocking { keyLock.withLock { pressedKeys.remove(e.keyCode) } }
     }
 
     override fun keyTyped(e: KeyEvent) {
@@ -62,6 +69,6 @@ class GameInput(private val frame: JFrame) : KeyListener {
      * @return true if the key is pressed, false otherwise
      */
     fun isKeyPressed(keyCode: Int): Boolean {
-        return pressedKeys.contains(keyCode)
+        return runBlocking { keyLock.withLock { pressedKeys.contains(keyCode) } }
     }
 } 

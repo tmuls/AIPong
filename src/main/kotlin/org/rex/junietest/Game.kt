@@ -13,7 +13,14 @@ import org.rex.junietest.entity.AIPaddleEntity
 import org.rex.junietest.input.GameInput
 import java.awt.Color
 import java.awt.event.KeyEvent
-import java.lang.Thread.sleep
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
+import kotlin.time.TimeSource
 
 class Game : JFrame() {
     // Shared, mutable playfield size that entities read from instead of
@@ -31,7 +38,8 @@ class Game : JFrame() {
 
     // Game state
     private var running = false
-    private var gameThread: Thread? = null
+    private val gameScope = CoroutineScope(Dispatchers.Default)
+    private var gameJob: Job? = null
     private var leftScore = 0
     private var rightScore = 0
 
@@ -150,36 +158,31 @@ class Game : JFrame() {
         // Start the rendering loop in GamePanel
         gamePanel.startRendering()
 
-        // Start the game loop in a separate thread
-        gameThread = Thread {
-            var lastUpdateTime = System.currentTimeMillis()
+        // Runs as a coroutine on a background dispatcher instead of
+        // java.lang.Thread, so this loop stays portable to Kotlin/Native
+        // (Dispatchers.Default runs on real OS threads there too).
+        gameJob = gameScope.launch {
+            val clock = TimeSource.Monotonic
+            var lastUpdateTime = clock.markNow()
 
             while (running) {
-                val currentTime = System.currentTimeMillis()
-                val elapsedTime = currentTime - lastUpdateTime
+                val elapsedMs = lastUpdateTime.elapsedNow().inWholeMilliseconds
 
-                if (elapsedTime >= targetFrameTime) {
-                    update(elapsedTime.toFloat() / 1000f) // Convert to seconds
-                    lastUpdateTime = currentTime
+                if (elapsedMs >= targetFrameTime) {
+                    update(elapsedMs.toFloat() / 1000f) // Convert to seconds
+                    val frameStart = clock.markNow()
+                    lastUpdateTime = frameStart
 
                     // Sleep to maintain the target frame rate
-                    val sleepTime = targetFrameTime - (System.currentTimeMillis() - currentTime)
+                    val sleepTime = targetFrameTime - frameStart.elapsedNow().inWholeMilliseconds
                     if (sleepTime > 0) {
-                        try {
-                            sleep(sleepTime)
-                        } catch (e: InterruptedException) {
-                            e.printStackTrace()
-                        }
+                        delay(sleepTime)
                     }
                 } else {
-                    // Yield to other threads if we're ahead of schedule
-                    Thread.yield()
+                    // Yield to other coroutines if we're ahead of schedule
+                    yield()
                 }
             }
-        }.apply {
-            name = "GameLoop"
-            isDaemon = true
-            start()
         }
     }
 
@@ -189,8 +192,8 @@ class Game : JFrame() {
     fun stopGame() {
         running = false
         gamePanel.stopRendering()
-        gameThread?.join(1000) // Wait for the game thread to finish
-        gameThread = null
+        runBlocking { gameJob?.join() } // Wait for the game loop to finish
+        gameJob = null
     }
 
     /**

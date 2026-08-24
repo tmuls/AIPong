@@ -9,15 +9,23 @@ import java.awt.Graphics2D
 import java.awt.RenderingHints
 import java.awt.Toolkit
 import javax.swing.JPanel
-import java.lang.Thread.sleep
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
+import kotlin.time.TimeSource
 
 class GamePanel : JPanel() {
-        // List to track all registered entitiesﬁ
+        // List to track all registered entities
         private val entities = mutableListOf<Entity>()
 
         // Rendering state
         private var rendering = false
-        private var renderThread: Thread? = null
+        private val renderScope = CoroutineScope(Dispatchers.Default)
+        private var renderJob: Job? = null
         private var currentFPS = 0 // Store the current FPS for rendering
         var displayBoundingBoxes = false // Flag to control bounding box display
 
@@ -64,48 +72,45 @@ class GamePanel : JPanel() {
 
             rendering = true
 
-            renderThread = Thread {
-                var lastRenderTime = System.currentTimeMillis()
+            // Runs as a coroutine on a background dispatcher instead of
+            // java.lang.Thread, so this loop stays portable to Kotlin/Native
+            // (Dispatchers.Default runs on real OS threads there too). The
+            // repaint()/paintComponent() calls below remain JVM-only Swing.
+            renderJob = renderScope.launch {
+                val clock = TimeSource.Monotonic
+                var lastRenderTime = clock.markNow()
                 var frameCount = 0
                 var lastFpsTime = lastRenderTime
 
                 while (rendering) {
-                    val currentTime = System.currentTimeMillis()
-                    val elapsedTime = currentTime - lastRenderTime
+                    val elapsedMs = lastRenderTime.elapsedNow().inWholeMilliseconds
 
-                    if (elapsedTime >= minFrameTime) {
+                    if (elapsedMs >= minFrameTime) {
                         // Repaint the panel
                         repaint()
 
                         // Update FPS counter
                         frameCount++
-                        if (currentTime - lastFpsTime >= 1000) {
+                        if (lastFpsTime.elapsedNow().inWholeMilliseconds >= 1000) {
                             // Store the current FPS for rendering
                             currentFPS = frameCount
                             frameCount = 0
-                            lastFpsTime = currentTime
+                            lastFpsTime = clock.markNow()
                         }
 
-                        lastRenderTime = currentTime
+                        val frameStart = clock.markNow()
+                        lastRenderTime = frameStart
 
                         // Sleep to maintain the max frame rate
-                        val sleepTime = minFrameTime - (System.currentTimeMillis() - currentTime)
+                        val sleepTime = minFrameTime - frameStart.elapsedNow().inWholeMilliseconds
                         if (sleepTime > 0) {
-                            try {
-                                sleep(sleepTime)
-                            } catch (e: InterruptedException) {
-                                e.printStackTrace()
-                            }
+                            delay(sleepTime)
                         }
                     } else {
-                        // Yield to other threads if we're ahead of schedule
-                        Thread.yield()
+                        // Yield to other coroutines if we're ahead of schedule
+                        yield()
                     }
                 }
-            }.apply {
-                name = "RenderLoop"
-                isDaemon = true
-                start()
             }
         }
 
@@ -114,8 +119,8 @@ class GamePanel : JPanel() {
          */
         fun stopRendering() {
             rendering = false
-            renderThread?.join(1000) // Wait for the render thread to finish
-            renderThread = null
+            runBlocking { renderJob?.join() } // Wait for the render loop to finish
+            renderJob = null
         }
 
         override fun paintComponent(g: Graphics) {
