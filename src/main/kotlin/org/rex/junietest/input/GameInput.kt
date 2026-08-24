@@ -3,24 +3,23 @@ package org.rex.junietest.input
 import java.awt.event.KeyEvent
 import java.awt.event.KeyListener
 import javax.swing.JFrame
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlin.concurrent.atomics.AtomicReference
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 /**
- * Handles keyboard input for the game
+ * Tracks which keys are currently held down, polled via isKeyPressed().
+ * No callback registration on purpose: PaddleEntity/AIPaddleEntity just
+ * poll every frame, which is one clear read path to reason about instead
+ * of callbacks firing out of a different (AWT) thread mid-frame.
  */
+@OptIn(ExperimentalAtomicApi::class)
 class GameInput(private val frame: JFrame) : KeyListener {
-    // Map of key codes to lists of callbacks
-    private val keyCallbacks = mutableMapOf<Int, MutableList<() -> Unit>>()
-
-    // Set of currently pressed keys, written from the AWT event thread
-    // (keyPressed/keyReleased) and read from the game loop thread
-    // (isKeyPressed). Guarded by keyLock instead of a JVM-only concurrent
-    // collection (java.util.concurrent has no Kotlin/Native equivalent);
-    // kotlinx.coroutines.sync.Mutex works identically on every target.
-    private val keyLock = Mutex()
-    private val pressedKeys = mutableSetOf<Int>()
+    // Written from the AWT event thread (keyPressed/keyReleased), read from
+    // the game loop thread (isKeyPressed). Published as an immutable Set
+    // through an atomic reference (copy-on-write) instead of a JVM-only
+    // concurrent collection, so isKeyPressed() is a lock-free read and this
+    // stays portable to Kotlin/Native.
+    private val pressedKeys = AtomicReference<Set<Int>>(emptySet())
 
     init {
         frame.addKeyListener(this)
@@ -28,35 +27,20 @@ class GameInput(private val frame: JFrame) : KeyListener {
         frame.requestFocus()
     }
 
-    /**
-     * Register a callback for when a key is pressed
-     * @param keyCode The key code to listen for (from KeyEvent)
-     * @param callback The function to call when the key is pressed
-     */
-    fun registerKeyPress(keyCode: Int, callback: () -> Unit) {
-        keyCallbacks.getOrPut(keyCode) { mutableListOf() }.add(callback)
-    }
-
-    /**
-     * Unregister a callback for a key press
-     * @param keyCode The key code to stop listening for
-     * @param callback The callback to remove
-     */
-    fun unregisterKeyPress(keyCode: Int, callback: () -> Unit) {
-        keyCallbacks[keyCode]?.remove(callback)
-    }
-
     override fun keyPressed(e: KeyEvent) {
-        // Check-and-add happens atomically inside the lock; callbacks run
-        // outside it so arbitrary callback code never executes while held.
-        val justPressed = runBlocking { keyLock.withLock { pressedKeys.add(e.keyCode) } }
-        if (justPressed) {
-            keyCallbacks[e.keyCode]?.forEach { it() }
+        while (true) {
+            val current = pressedKeys.load()
+            if (e.keyCode in current) return
+            if (pressedKeys.compareAndSet(current, current + e.keyCode)) return
         }
     }
 
     override fun keyReleased(e: KeyEvent) {
-        runBlocking { keyLock.withLock { pressedKeys.remove(e.keyCode) } }
+        while (true) {
+            val current = pressedKeys.load()
+            if (e.keyCode !in current) return
+            if (pressedKeys.compareAndSet(current, current - e.keyCode)) return
+        }
     }
 
     override fun keyTyped(e: KeyEvent) {
@@ -69,6 +53,6 @@ class GameInput(private val frame: JFrame) : KeyListener {
      * @return true if the key is pressed, false otherwise
      */
     fun isKeyPressed(keyCode: Int): Boolean {
-        return runBlocking { keyLock.withLock { pressedKeys.contains(keyCode) } }
+        return keyCode in pressedKeys.load()
     }
-} 
+}
