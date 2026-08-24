@@ -19,54 +19,40 @@ import kotlinx.coroutines.yield
 import kotlin.time.TimeSource
 
 class GamePanel : JPanel() {
-        // List to track all registered entities
         private val entities = mutableListOf<Entity>()
 
-        // Rendering state
         private var rendering = false
         private val renderScope = CoroutineScope(Dispatchers.Default)
         private var renderJob: Job? = null
-        private var currentFPS = 0 // Store the current FPS for rendering
-        var displayBoundingBoxes = false // Flag to control bounding box display
+        private var currentFPS = 0
+        var displayBoundingBoxes = false
 
-        // Rendering loop constants
         private val maxFPS = 500
         private val minFrameTime = 1000 / maxFPS // in milliseconds
 
         init {
             preferredSize = Dimension(PANEL_WIDTH, PANEL_HEIGHT)
             background = Color.BLACK
-            // Set double buffering for smoother rendering
             isDoubleBuffered = true
         }
 
         companion object {
-            // Static width and height variables
             const val PANEL_WIDTH = 800
             const val PANEL_HEIGHT = 600
         }
 
-        /**
-         * Register an entity to be rendered by this panel
-         */
         fun registerEntity(entity: Entity) {
             synchronized(entities) {
                 entities.add(entity)
             }
         }
 
-        /**
-         * Unregister an entity from this panel
-         */
         fun unregisterEntity(entity: Entity) {
             synchronized(entities) {
                 entities.remove(entity)
             }
         }
 
-        /**
-         * Starts the independent rendering loop
-         */
         fun startRendering() {
             if (rendering) return
 
@@ -86,13 +72,10 @@ class GamePanel : JPanel() {
                     val elapsedMs = lastRenderTime.elapsedNow().inWholeMilliseconds
 
                     if (elapsedMs >= minFrameTime) {
-                        // Repaint the panel
                         repaint()
 
-                        // Update FPS counter
                         frameCount++
                         if (lastFpsTime.elapsedNow().inWholeMilliseconds >= 1000) {
-                            // Store the current FPS for rendering
                             currentFPS = frameCount
                             frameCount = 0
                             lastFpsTime = clock.markNow()
@@ -101,25 +84,20 @@ class GamePanel : JPanel() {
                         val frameStart = clock.markNow()
                         lastRenderTime = frameStart
 
-                        // Sleep to maintain the max frame rate
                         val sleepTime = minFrameTime - frameStart.elapsedNow().inWholeMilliseconds
                         if (sleepTime > 0) {
                             delay(sleepTime)
                         }
                     } else {
-                        // Yield to other coroutines if we're ahead of schedule
                         yield()
                     }
                 }
             }
         }
 
-        /**
-         * Stops the rendering loop
-         */
         fun stopRendering() {
             rendering = false
-            runBlocking { renderJob?.join() } // Wait for the render loop to finish
+            runBlocking { renderJob?.join() }
             renderJob = null
         }
 
@@ -130,13 +108,10 @@ class GamePanel : JPanel() {
             // Enable anti-aliasing for smoother graphics
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
-            // Render all registered entities
             synchronized(entities) {
                 for (entity in entities) {
-                    // Render the entity
                     entity.render(g2d)
-                    
-                    // Render bounding box if enabled
+
                     if (displayBoundingBoxes) {
                         g2d.color = Color(150, 150, 150, 128) // Medium gray with 50% opacity
                         entity.renderBoundingBox(g2d)
@@ -144,7 +119,6 @@ class GamePanel : JPanel() {
                 }
             }
 
-            // Render FPS in the top right corner
             g2d.font = Font("Arial", Font.PLAIN, 14)
             g2d.color = Color.WHITE
             val fpsText = "fps: $currentFPS"

@@ -4,12 +4,9 @@ import java.awt.Color
 import java.awt.Graphics2D
 import org.rex.junietest.core.Bounds
 
-/**
- * Net entity that renders a vertical line in the center of the screen
- */
 class NetEntity(private val bounds: Bounds) : Entity(
     x = bounds.width / 2 - 2.5f, // Center the net with 5px width
-    y = 10f, // Start 10 pixels from top
+    y = 10f,
     width = 5,
     height = (bounds.height - 20).toInt() // Subtract 20 to account for 10px gap at top and bottom
 ) {
@@ -24,4 +21,4 @@ class NetEntity(private val bounds: Bounds) : Entity(
         x = bounds.width / 2 - 2.5f
         height = (bounds.height - 20).toInt()
     }
-} 
+}
