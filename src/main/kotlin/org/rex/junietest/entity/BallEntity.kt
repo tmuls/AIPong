@@ -3,7 +3,7 @@ package org.rex.junietest.entity
 import java.awt.Color
 import java.awt.Graphics2D
 import java.awt.Rectangle
-import org.rex.junietest.renderer.GamePanel
+import org.rex.junietest.core.Bounds
 import kotlin.math.absoluteValue
 import kotlin.random.Random
 import kotlin.math.sqrt
@@ -12,10 +12,11 @@ import kotlin.math.sqrt
  * Ball entity that extends the base Entity class.
  */
 class BallEntity(
-    x: Float, 
-    y: Float, 
-    val radius: Int, 
+    x: Float,
+    y: Float,
+    val radius: Int,
     val color: Color,
+    private val bounds: Bounds,
     var ballSpeed: Float = DEFAULT_VELOCITY,
     val scorePoint: ((Side) -> Unit)? = null
 ) : Entity(x, y, radius * 2, radius * 2) {
@@ -65,14 +66,14 @@ class BallEntity(
             // Call scorePoint lambda for right side scoring
             scorePoint?.invoke(Side.RIGHT)
             // Reset ball position to center
-            centerInPanel()
+            centerInBounds()
             // Set a new random velocity
             setRandomVelocity()
-        } else if (x > GamePanel.PANEL_WIDTH - width) {
+        } else if (x > bounds.width - width) {
             // Call scorePoint lambda for left side scoring
             scorePoint?.invoke(Side.LEFT)
             // Reset ball position to center
-            centerInPanel()
+            centerInBounds()
             // Set a new random velocity
             setRandomVelocity()
         }
@@ -81,8 +82,8 @@ class BallEntity(
             y = 0f
             velocityY = -velocityY // Bounce off top wall
             bounced = true
-        } else if (y > GamePanel.PANEL_HEIGHT - height) {
-            y = (GamePanel.PANEL_HEIGHT - height).toFloat()
+        } else if (y > bounds.height - height) {
+            y = bounds.height - height
             velocityY = -velocityY // Bounce off bottom wall
             bounced = true
         }
@@ -100,25 +101,25 @@ class BallEntity(
     fun handlePaddleCollision(paddle: PaddleEntity) {
         // Calculate the distance from the center of the paddle (-1 to 1)
         val distanceFromCenter = ((y + height / 2) - (paddle.y + paddle.height / 2)) / (paddle.height / 2)
-
+        
         // Calculate bounce angle based on distance from center
         // -1 = top of paddle, 0 = center, 1 = bottom
         val bounceAngle = distanceFromCenter * 0.8f // Scale down to 80% to prevent too steep angles
-
+        
         // Reverse X direction and set Y velocity based on bounce angle
         velocityX = -velocityX
         velocityY = bounceAngle
-
+        
         // Ensure minimum Y velocity of 0.1
         if (velocityY.absoluteValue < 0.1f) {
             velocityY = if (velocityY >= 0) 0.1f else -0.1f
         }
-
+        
         // Normalize the velocity vector
         val magnitude = kotlin.math.sqrt(velocityX * velocityX + velocityY * velocityY)
         velocityX /= magnitude
         velocityY /= magnitude
-
+        
         // Increase ball speed
         ballSpeed = (ballSpeed + VELOCITY_INCREASE).coerceAtMost(MAX_VELOCITY)
 
@@ -153,11 +154,11 @@ class BallEntity(
     }
 
     /**
-     * Centers the ball in the game panel and resets its speed
+     * Centers the ball within its bounds and resets its speed
      */
-    fun centerInPanel() {
-        x = (GamePanel.PANEL_WIDTH / 2 - radius).toFloat()
-        y = (GamePanel.PANEL_HEIGHT / 2 - radius).toFloat()
+    fun centerInBounds() {
+        x = bounds.width / 2 - radius
+        y = bounds.height / 2 - radius
         ballSpeed = DEFAULT_VELOCITY
     }
 

@@ -1,6 +1,7 @@
 package org.rex.junietest
 
 import javax.swing.JFrame
+import org.rex.junietest.core.Bounds
 import org.rex.junietest.renderer.GamePanel
 import org.rex.junietest.entity.BallEntity
 import org.rex.junietest.entity.Entity
@@ -15,6 +16,10 @@ import java.awt.event.KeyEvent
 import java.lang.Thread.sleep
 
 class Game : JFrame() {
+    // Shared, mutable playfield size that entities read from instead of
+    // hardcoding GamePanel.PANEL_WIDTH/HEIGHT.
+    private val bounds = Bounds(GamePanel.PANEL_WIDTH.toFloat(), GamePanel.PANEL_HEIGHT.toFloat())
+
     private val gamePanel: GamePanel
     private val ball: BallEntity
     private val net: NetEntity
@@ -47,19 +52,19 @@ class Game : JFrame() {
         gameInput = GameInput(this)
 
         // Create the ball entity (50% smaller than before) with default velocity and scorePoint lambda
-        ball = BallEntity(0f, 0f, 12, Color.ORANGE, BallEntity.DEFAULT_VELOCITY, this::pointScored)
+        ball = BallEntity(0f, 0f, 12, Color.ORANGE, bounds, BallEntity.DEFAULT_VELOCITY, this::pointScored)
 
         // Create the net entity
-        net = NetEntity()
+        net = NetEntity(bounds)
 
         // Create score text entities
         leftScoreText = TextEntity(
-            x = (GamePanel.PANEL_WIDTH / 4).toFloat(), // Position at 1/4 of screen width
+            x = bounds.width / 4, // Position at 1/4 of screen width
             y = 30f, // Position near top
             fontSize = 32
         )
         rightScoreText = TextEntity(
-            x = (GamePanel.PANEL_WIDTH * 3 / 4).toFloat(), // Position at 3/4 of screen width
+            x = bounds.width * 3 / 4, // Position at 3/4 of screen width
             y = 30f, // Position near top
             fontSize = 32
         )
@@ -67,16 +72,18 @@ class Game : JFrame() {
         // Create paddles
         leftPaddle = PaddleEntity(
             x = 40f, // 40 pixels from left edge
-            y = (GamePanel.PANEL_HEIGHT / 2 - 40).toFloat(), // Center vertically (half of 80px height)
+            y = bounds.height / 2 - 40, // Center vertically (half of 80px height)
             color = Color(255, 182, 193), // Pastel red
+            bounds = bounds,
             upKey = KeyEvent.VK_W,
             downKey = KeyEvent.VK_S,
             gameInput = gameInput
         )
         rightPaddle = AIPaddleEntity(
-            x = (GamePanel.PANEL_WIDTH - 50).toFloat(), // 40 pixels from right edge (50 = 40 + 10 width)
-            y = (GamePanel.PANEL_HEIGHT / 2 - 40).toFloat(), // Center vertically (half of 80px height)
+            x = bounds.width - 50, // 40 pixels from right edge (50 = 40 + 10 width)
+            y = bounds.height / 2 - 40, // Center vertically (half of 80px height)
             color = Color(173, 216, 230), // Pastel blue
+            bounds = bounds,
             ball = ball
         )
 
@@ -92,7 +99,7 @@ class Game : JFrame() {
         setLocationRelativeTo(null) // Center on screen
 
         // Position the ball in the center of the panel
-        ball.centerInPanel()
+        ball.centerInBounds()
 
         // Initialize score display
         updateScoreDisplay()
