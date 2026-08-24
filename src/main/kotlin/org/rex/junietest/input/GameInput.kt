@@ -14,11 +14,14 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
  */
 @OptIn(ExperimentalAtomicApi::class)
 class GameInput(private val frame: JFrame) : KeyListener {
-    // Written from the AWT event thread (keyPressed/keyReleased), read from
-    // the game loop thread (isKeyPressed). Published as an immutable Set
-    // through an atomic reference (copy-on-write) instead of a JVM-only
-    // concurrent collection, so isKeyPressed() is a lock-free read and this
-    // stays portable to Kotlin/Native.
+    // Build buffer: mutated only from the AWT event thread. Swing dispatches
+    // keyPressed/keyReleased serially, never concurrently, so this needs no
+    // locking - there's exactly one writer.
+    private val keyBuffer = mutableSetOf<Int>()
+
+    // Published snapshot the game loop thread reads via isKeyPressed(). Every
+    // change to keyBuffer is republished here as a fresh immutable copy, so
+    // reads are lock-free and this stays portable to Kotlin/Native.
     private val pressedKeys = AtomicReference<Set<Int>>(emptySet())
 
     init {
@@ -28,19 +31,13 @@ class GameInput(private val frame: JFrame) : KeyListener {
     }
 
     override fun keyPressed(e: KeyEvent) {
-        while (true) {
-            val current = pressedKeys.load()
-            if (e.keyCode in current) return
-            if (pressedKeys.compareAndSet(current, current + e.keyCode)) return
-        }
+        keyBuffer.add(e.keyCode)
+        pressedKeys.store(keyBuffer.toSet())
     }
 
     override fun keyReleased(e: KeyEvent) {
-        while (true) {
-            val current = pressedKeys.load()
-            if (e.keyCode !in current) return
-            if (pressedKeys.compareAndSet(current, current - e.keyCode)) return
-        }
+        keyBuffer.remove(e.keyCode)
+        pressedKeys.store(keyBuffer.toSet())
     }
 
     override fun keyTyped(e: KeyEvent) {
