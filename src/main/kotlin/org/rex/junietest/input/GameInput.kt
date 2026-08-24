@@ -6,7 +6,7 @@ import javax.swing.JFrame
 import kotlin.concurrent.Volatile
 
 /**
- * Tracks keyboard state, frozen once per game tick via sync().
+ * Tracks keyboard state, frozen once per game tick via update().
  * No callback registration on purpose: consumers poll isKeyPressed() /
  * wasKeyJustPressed() / wasKeyJustReleased(), which is one clear read path
  * to reason about instead of callbacks firing out of a different (AWT)
@@ -26,7 +26,7 @@ class GameInput(private val frame: JFrame) : KeyListener {
     private var liveKeys: Set<Int> = emptySet()
 
     // Frame-scoped state: read and written only by the game loop thread,
-    // inside sync(). The AWT thread never touches these, so they need no
+    // inside update(). The AWT thread never touches these, so they need no
     // synchronization at all.
     private var heldKeys: Set<Int> = emptySet()
     private var justPressedKeys: Set<Int> = emptySet()
@@ -59,7 +59,7 @@ class GameInput(private val frame: JFrame) : KeyListener {
      * update - otherwise a key event landing mid-tick could make two reads
      * of the same key within the same frame disagree with each other.
      */
-    fun sync() {
+    fun update() {
         val current = liveKeys // single volatile read; stable for the rest of this frame
         justPressedKeys = current - heldKeys
         justReleasedKeys = heldKeys - current
