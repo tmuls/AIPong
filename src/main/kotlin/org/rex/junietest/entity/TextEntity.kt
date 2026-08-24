@@ -18,7 +18,6 @@ class TextEntity(
         g.color = color
         g.font = Font("Arial", Font.BOLD, fontSize)
 
-        // Get the text dimensions to center it
         val metrics = g.fontMetrics
         val textWidth = metrics.stringWidth(text)
         val textHeight = metrics.height
