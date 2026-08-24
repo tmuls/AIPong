@@ -100,27 +100,37 @@ class BallEntity(
     fun handlePaddleCollision(paddle: PaddleEntity) {
         // Calculate the distance from the center of the paddle (-1 to 1)
         val distanceFromCenter = ((y + height / 2) - (paddle.y + paddle.height / 2)) / (paddle.height / 2)
-        
+
         // Calculate bounce angle based on distance from center
         // -1 = top of paddle, 0 = center, 1 = bottom
         val bounceAngle = distanceFromCenter * 0.8f // Scale down to 80% to prevent too steep angles
-        
+
         // Reverse X direction and set Y velocity based on bounce angle
         velocityX = -velocityX
         velocityY = bounceAngle
-        
+
         // Ensure minimum Y velocity of 0.1
         if (velocityY.absoluteValue < 0.1f) {
             velocityY = if (velocityY >= 0) 0.1f else -0.1f
         }
-        
+
         // Normalize the velocity vector
         val magnitude = kotlin.math.sqrt(velocityX * velocityX + velocityY * velocityY)
         velocityX /= magnitude
         velocityY /= magnitude
-        
+
         // Increase ball speed
         ballSpeed = (ballSpeed + VELOCITY_INCREASE).coerceAtMost(MAX_VELOCITY)
+
+        // Push the ball fully outside the paddle's bounding box so it can't
+        // still be overlapping (and re-trigger this collision) next frame.
+        val paddleLeft = paddle.x + paddle.boundingBox.x
+        val paddleRight = paddleLeft + paddle.boundingBox.width
+        x = if (velocityX > 0) {
+            paddleRight - boundingBox.x
+        } else {
+            paddleLeft - boundingBox.x - boundingBox.width
+        }
     }
 
     /**
