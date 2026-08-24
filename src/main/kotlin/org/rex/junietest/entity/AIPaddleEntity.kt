@@ -2,7 +2,7 @@ package org.rex.junietest.entity
 
 import java.awt.Color
 import java.awt.Graphics2D
-import org.rex.junietest.renderer.GamePanel
+import org.rex.junietest.core.Bounds
 
 /**
  * AI-controlled paddle entity that extends the base PaddleEntity
@@ -11,9 +11,10 @@ class AIPaddleEntity(
     x: Float,
     y: Float,
     color: Color,
+    bounds: Bounds,
     paddleSpeed: Float = 600f,
     private val ball: BallEntity
-) : PaddleEntity(x, y, color, paddleSpeed, 0, 0, null) {
+) : PaddleEntity(x, y, color, bounds, paddleSpeed, 0, 0, null) {
 
     // AI behavior constants
     private val minReactionDelay = 0.15f // seconds
@@ -37,7 +38,7 @@ class AIPaddleEntity(
             isMakingMistake = true
             mistakeTimer = 0f
             // Set a random mistake target position
-            mistakeTargetY = kotlin.random.Random.nextFloat() * (GamePanel.PANEL_HEIGHT - height)
+            mistakeTargetY = kotlin.random.Random.nextFloat() * (bounds.height - height)
             // Set a random reaction delay for the mistake
             reactionDelay = minReactionDelay + kotlin.random.Random.nextFloat() * (maxReactionDelay - minReactionDelay)
         }
@@ -67,7 +68,7 @@ class AIPaddleEntity(
                     val predictionError = (kotlin.random.Random.nextFloat() - 0.5f) * 20f
                     
                     // Set target to predicted position with error, adjusted for paddle height
-                    targetY = (predictedY - height / 2 + predictionError).coerceIn(0f, (GamePanel.PANEL_HEIGHT - height).toFloat())
+                    targetY = (predictedY - height / 2 + predictionError).coerceIn(0f, bounds.height - height)
                 }
             }
         }
@@ -84,6 +85,6 @@ class AIPaddleEntity(
         y += movement
 
         // Keep paddle within screen bounds
-        y = y.coerceIn(0f, (GamePanel.PANEL_HEIGHT - height).toFloat())
+        y = y.coerceIn(0f, bounds.height - height)
     }
 } 

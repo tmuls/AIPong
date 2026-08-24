@@ -2,6 +2,7 @@ package org.rex.junietest.input
 
 import java.awt.event.KeyEvent
 import java.awt.event.KeyListener
+import java.util.concurrent.ConcurrentHashMap
 import javax.swing.JFrame
 
 /**
@@ -10,9 +11,11 @@ import javax.swing.JFrame
 class GameInput(private val frame: JFrame) : KeyListener {
     // Map of key codes to lists of callbacks
     private val keyCallbacks = mutableMapOf<Int, MutableList<() -> Unit>>()
-    
-    // Set of currently pressed keys
-    private val pressedKeys = mutableSetOf<Int>()
+
+    // Set of currently pressed keys. Written from the AWT event thread
+    // (keyPressed/keyReleased) and read from the game loop thread
+    // (isKeyPressed), so it needs to be a thread-safe set.
+    private val pressedKeys = ConcurrentHashMap.newKeySet<Int>()
 
     init {
         frame.addKeyListener(this)

@@ -3,7 +3,7 @@ package org.rex.junietest.entity
 import java.awt.Color
 import java.awt.Graphics2D
 import java.awt.Rectangle
-import org.rex.junietest.renderer.GamePanel
+import org.rex.junietest.core.Bounds
 import org.rex.junietest.input.GameInput
 import java.awt.event.KeyEvent
 
@@ -14,6 +14,7 @@ open class PaddleEntity(
     x: Float,
     y: Float,
     private val color: Color,
+    protected val bounds: Bounds,
     var paddleSpeed: Float = 600f,
     private val upKey: Int,
     private val downKey: Int,
@@ -49,6 +50,6 @@ open class PaddleEntity(
         y += movement
 
         // Keep paddle within screen bounds
-        y = y.coerceIn(0f, (GamePanel.PANEL_HEIGHT - height).toFloat())
+        y = y.coerceIn(0f, bounds.height - height)
     }
 } 
